@@ -1,0 +1,6 @@
+{
+    "editor.fontSize": 10,
+    "editor.formatOnPaste": true,
+    "appService.defaultWebAppToDeploy": "undefined/subscriptions/dcd70f18-d6a3-414a-bae6-5387c577eb7b/resourceGroups/rg-webappaichatbot/providers/Microsoft.Web/sites/chatbot-Llamaindex-server",
+    "appService.deploySubpath": "."
+}
