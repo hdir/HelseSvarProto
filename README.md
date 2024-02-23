@@ -5,6 +5,7 @@ It utilizes the Llama Index library for managing vector storage and retrieval, o
 For the client application, please refer to the 'React Native ChatGPT Client Application' section
 This application serves as a demonstrative example to test the capabilities of Retrieval-Augmented Generation (RAG) using Llama Index and OpenAI. 
 It has been developed by HELSEDIREKTORATET (the Norwegian Directorate of Health) as part of the 'HelseSvar' project.
+![plot](./helsesvarproto.png)
 
 ## Features
 
