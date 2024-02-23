@@ -74,6 +74,7 @@ Ensure you have React Native set up in your development environment. For detaile
     npm install
 
 ### Running the Application
+
     To start the application, run the following command in the "src"" directory:
     cd src
     npm start
@@ -81,6 +82,7 @@ Ensure you have React Native set up in your development environment. For detaile
     The application stars in you default web browser
 
 ### Usage
+
     Enter your query in the text input field.
     Press 'Send' to submit the query to the server.
     The response from the server will be displayed in the chat window.
