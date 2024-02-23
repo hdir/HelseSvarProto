@@ -1,84 +1,93 @@
-from flask import Flask, request
+from flask import Flask, request, Response
 from flask_cors import CORS
 from dotenv import load_dotenv
 import openai
 import os
 import json
+import llama_index.core.readers as readers
+from llama_index.core import Settings, StorageContext, VectorStoreIndex, load_index_from_storage, get_response_synthesizer
+from llama_index.llms.openai import OpenAI
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.retrievers import VectorIndexRetriever
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.postprocessor import SimilarityPostprocessor
 
-from llama_index import (
-    StorageContext, ServiceContext, OpenAIEmbedding, GPTVectorStoreIndex, 
-    PromptHelper, SimpleDirectoryReader, load_index_from_storage
-)
-from llama_index.llms import OpenAI
-from llama_index.text_splitter import SentenceSplitter
-
-# Load environment variables from .env file
-# your .env file should contain 2 keys, go into your OpenAI account, Profile (personal) and choose setting:
-#OPENAI_API_KEY=<your openAI key>
-#OPENAI_ORG=<your organisation key>
+# Load environment variables
 load_dotenv()
-
-# Use your API key.
 openai.api_key = os.getenv("OPENAI_API_KEY")
-print('openAi key:', openai.api_key)
+openai.organization = os.getenv("OPENAI_ORG")
 
-# Use your ORG key.
-openai.organization = os.getenv('OPENAI_ORG')
-print('ORG key:', openai.organization)
+def download_and_persist_storage(name, storage):
+    print('1 - download_and_persist_storage')
+    documents = readers.SimpleDirectoryReader(input_dir=name).load_data()
+    print(f'2 - Loaded {len(documents)} documents')
 
-indexName = 'hvaerinnafor'
+    nodes = Settings.text_splitter.get_nodes_from_documents(documents)
+    print('3 - SentenceSplitter ok')
+    print(f'4 - Loaded {len(nodes)} nodes')
 
+    storage_context = StorageContext.from_defaults()
+    print('5 - StorageContext.from_defaults ok')
+
+    index = VectorStoreIndex(nodes, storage_context=storage_context)
+    print('6 - VectorStoreIndex created in memory')
+
+    storage_context.persist(persist_dir=storage)
+    print('7 - storage_context.persist ok')
+
+    return index
+
+# Flask app configuration
 app = Flask(__name__)
 CORS(app)
 
-def create_service_context():
-    llm = OpenAI(model="gpt-3.5-turbo", temperature=0, max_tokens=1000)
-    embed_model = OpenAIEmbedding()
-    text_splitter = SentenceSplitter(chunk_size=256, chunk_overlap=75)
-    prompt_helper = PromptHelper(
-        context_window=4096,
-        num_output=256,
-        chunk_overlap_ratio=0.7,
-        chunk_size_limit=None
-    )
+# Llama Index Settings
+Settings.text_splitter = SentenceSplitter.from_defaults(chunk_size=512, chunk_overlap=154)
+Settings.context_window = 6000
+Settings.num_output = 2000
+Settings.chunk_size = 512
+Settings.llm = OpenAI(model="gpt-3.5-turbo", temperature=0, max_tokens=1000)
+Settings.embed_model = OpenAIEmbedding()
 
-    service_context = ServiceContext.from_defaults(
-        llm=llm,
-        embed_model=embed_model,
-        text_splitter=text_splitter,
-        prompt_helper=prompt_helper
-    )
-    return service_context
+# Build and store index
+index = download_and_persist_storage('./data/titanic', './storage/titanic')
 
-def data_ingestion_indexing(directory_path):
-    print('Reading documents from ', './data/'+directory_path)
-    documents = SimpleDirectoryReader('./data/'+directory_path).load_data()
-
-    index = GPTVectorStoreIndex.from_documents(
-        documents, service_context=create_service_context()
-    )
-    print('Persisting storage context for ', './storage/'+directory_path, '...')
-    index.storage_context.persist(persist_dir='./storage/'+directory_path)
-    return index
-
-index = data_ingestion_indexing(indexName) # generate the index files
-
+# Read index
 print('Reading storage context...')
-storage_context = StorageContext.from_defaults(persist_dir='./storage/'+indexName)
+storage_context = StorageContext.from_defaults(persist_dir='./storage/titanic')
 
 print('Loading index...')
-index = load_index_from_storage(storage_context, service_context=create_service_context())
+load_index_from_storage(storage_context)
 
+# Configure retriever and query engine
+retriever = VectorIndexRetriever(index=index, similarity_top_k=20)
+response_synthesizer = get_response_synthesizer(response_mode='tree_summarize', streaming=True, structured_answer_filtering=True)
+query_engine = RetrieverQueryEngine(retriever=retriever, response_synthesizer=response_synthesizer, node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.7)])
 
 @app.route('/chat', methods=['POST'])
 def chat():
     print('Received data:', request.json)
     data = request.json
     messages = data.get('messages', [])
+    showContext_fromRequest = data.get('showContext', False)
+    answer = query_engine.query(json.dumps(messages, ensure_ascii=False))
 
-    response = index.as_query_engine().query(json.dumps(messages, ensure_ascii=False))
-    print(response.response)
-    return response.response
+    def generate_response():
+        try:
+            for text in answer.response_gen:
+                text = text.replace('\\n', '\n').replace('\\"', '"')
+                yield text
+                
+            if showContext_fromRequest : 
+                yield f"\n\nFølgende {len(answer.source_nodes)} tekster er brukt:"
+                for node in list(answer.source_nodes):
+                    yield f'\nMetadata: {node.metadata}\nNode: {node}\n-------'    
+
+        except AttributeError:
+            pass
+
+    return Response(generate_response(), content_type="application/json; charset=utf-8")
 
 if __name__ == '__main__':
     app.run(port=80)

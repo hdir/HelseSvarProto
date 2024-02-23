@@ -25,3 +25,7 @@ cache/*.*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+_*.*
+/data/prevensjonsguiden
+/data/hvaerinnafor

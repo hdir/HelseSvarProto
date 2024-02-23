@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, Pressable, Image } from 'react-native'
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, CheckBox, TextInput, Pressable, Image } from 'react-native'
 
 const timer = ms => new Promise(res => setTimeout(res, ms))
 const serverURL = 'http://127.0.0.1:80/chat';
@@ -10,6 +10,23 @@ export default function ChatGPT() {
     const [isProgressIconVisible, setProgressIconVisibility] = useState(false);
     const [height, setHeight] = useState(80);
     const [textOutput, setTextOutput] = useState("");
+    const [showContext, setShowContext] = useState(false);
+
+    const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+    const [promptHeight, setPromptHeight] = useState(80);
+    const [promptSectionHeight, setPromptSectionHeight] = useState(100);
+    const [topSectionHeight, setTopSectionHeight] = useState(20);
+
+    useEffect(() => {
+        const handleResize = () => {
+            setWindowHeight(window.innerHeight);
+        };
+
+        window.addEventListener('resize', handleResize);
+
+        // Cleanup the event listener when the component unmounts
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
 
     const toggleProgressIconVisibility = () => {
@@ -45,7 +62,7 @@ export default function ChatGPT() {
         const reader = response.body
             .pipeThrough(new TextDecoderStream())
             .getReader();
-        let first10 = "";
+        let first20 = "";
         let text = "";
         try {
             while (true) {
@@ -54,18 +71,18 @@ export default function ChatGPT() {
                     break;
                 } else {
                     let chunk = value;
-                    first10 = "";
+                    first20 = "";
                     while (true) {
-                        if (chunk.length > 10) {
+                        if (chunk.length > 20) {
                             // noen chunk kan være store, behov for å stykke de opp
-                            first10 = chunk.slice(0, 10);
-                            text += first10;
+                            first20 = chunk.slice(0, 20);
+                            text += first20;
                        
                             setData([...data, { type: 'user', buttonText: "USER", 'text': textInput },
                             { type: 'bot', buttonText: "ASSISTENT", 'text': text }]);
                     
-                            chunk = chunk.slice(10);
-                            await timer(100);
+                            chunk = chunk.slice(20);
+                            await timer(1);
                         } else {
                             text += chunk;
                             
@@ -74,10 +91,13 @@ export default function ChatGPT() {
                         
                             break;
                         }
+                        list.current.scrollToEnd({ animated: true })
                     }
+                    
                 }
-
+            
             }
+            
         } catch (error) {
             // Handle any errors that occur during reading
             console.error("Error reading the stream:", error);
@@ -110,6 +130,7 @@ export default function ChatGPT() {
                         role: "user",
                         content: textInput
                     }],
+                    showContext: showContext,
                 }),
             });
             clearInput();
@@ -128,36 +149,47 @@ export default function ChatGPT() {
             console.log("error", error);
             hideProgressIcon();
         }
-
-
     }
 
 
     return (
 
         <View style={styles.container}>
-            <View style={[styles.row, { minHeight: 100, flexDirection: 'row' }]}>
+            <View 
+                onLayout={(event) => {
+                    const layout = event.nativeEvent.layout;
+                    if (topSectionHeight !== layout.height) {
+                        setTopSectionHeight(layout.height); // assuming you want to store the entire layout 
+                    }
+                }}
+                style={[styles.row, { minHeight: 100, flexDirection: 'row' }]}>
                 <View style={[styles.col1, { flex: 2, }]}>
                 </View>
-                <View style={[styles.col3, { flex: 4, }]}>
 
+                <View style={[styles.col2, { flex: 8, justifyContent: 'left',} ]}>
                     <Text style={[styles.title, { textAlign: 'left' }]}>Test av VectorIndex for OpenAI</Text>
+                    <Text style={[styles.ingress, { textAlign: 'left' },]}>Denne assistenten bruker ChatGPT til å foreslå et svar basert på referansetekster.</Text>
+                    <Text style={[styles.ingress, { textAlign: 'left' },]}>Referansetekstene kan være et utvalg av txt, docx, pdf-filer eller nettsider</Text>
+                    <Text style={[styles.ingress, { textAlign: 'left' },]}>I denne prototypen er det lest inn en pdf-fil fra wikipedia om Titanic</Text>
+                    <Text style={[styles.ingress, { textAlign: 'left' },]}>Du kan starte med å sprørre: "Når forliste Titanic?", "Hvilke skader fikk skipet?"</Text>
 
-                   
-
-                </View>
-                <View style={[styles.col3, { flex: 4, justifyContent: 'center' }]}>
-                    <Text style={[styles.ingress, { textAlign: 'right' },]}>Denne assistenten bruker ChatGPT til å foreslå et svar basert på referansetekster.</Text>
-                    <Text style={[styles.ingress, { textAlign: 'right' },]}>Referansetekstene kan være et utvalg av txt, docx, pdf-filer eller nettsider</Text>
-                    <Text style={[styles.ingress, { textAlign: 'right' },]}>I denne prototypen er det lest inn en pdf-fil fra wikipedia om Titanic</Text>
-                    <Text style={[styles.ingress, { textAlign: 'right' },]}>Du kan starte med å sprørre "Hva var Titanic?", "Når forliste Titanic?", "Hvilke skader fikk skipet?"</Text>
-
+                    <View style={[styles.row, { paddingTop: 8, justifyContent: 'flex-start' }]}>
+                        <Text style={[styles.subtitle, { textAlign: 'left', paddingRight: 20 }]}>Vis referansetekster som er brukt:</Text>
+                        <CheckBox
+                            value={showContext}
+                            onValueChange={(newValue) => {
+                                setShowContext(newValue);
+                            }}
+                            style={styles.checkbox}
+                            color='grey'
+                        />
+                    </View>
                 </View>
                 <View style={[styles.col1, { flex: 2, minHeight: 100 }]}>
                 </View>
             </View>
 
-            <View style={[styles.row, { minHeight: 300, }]}>
+            <View style={[styles.row, { height: windowHeight - topSectionHeight - promptSectionHeight, }]}>
                 <View style={[styles.col1, { flex: 2 }]}>
                 </View>
                 <View style={[styles.col2, { minHeight: 300, maxHeight: 900, flex: 8 }]}>
@@ -169,8 +201,9 @@ export default function ChatGPT() {
                         ItemSeparatorComponent={seperator}
                         ListFooterComponent={<View style={{ height: 20 }} />}
                         style={[styles.body, { borderRadius: 4 }]}
-                        onContentSizeChange={() => list.current.scrollToEnd({ animated: true })}
-                        //inverted
+
+                        //onContentSizeChange={() => list.current.scrollToEnd({ animated: true })}
+                        //inverted={-1}
                         renderItem={({ item, index }) => (
                             <View style={[{ flexDirection: 'row', padding: 2, /* backgroundColor: getBackgroundColor(item)*/ }]}>
                                 <Text style={styles.role}>{item.buttonText} </Text><Text style={styles.bot}>{item.text}</Text>
@@ -188,7 +221,7 @@ export default function ChatGPT() {
                 </View>
                 <View style={[styles.col2, { flex: 8 }]}>
                     <TextInput
-                        style={[styles.input, { height: Math.max(80, height) }]}
+                        style={[styles.input, { height: Math.max(80, promptHeight) }]}
                         placeholder="Angi spørsmålet her.."
                         spellCheck="false"
                         readOnly={false}
@@ -198,7 +231,7 @@ export default function ChatGPT() {
                         value={textInput}
                         onContentSizeChange={(e) => {
                             const newHeight = e.nativeEvent.contentSize.height;
-                            setHeight(newHeight);
+                            setPromptHeight(newHeight);
                         }}
                         onChangeText={text => setTextInput(text)}
 
@@ -387,6 +420,10 @@ const styles = StyleSheet.create({
         height: 1,
         width: "100%",
         backgroundColor: "rgba(0,0,0,0.1)",
+    },
+    checkbox: {
+        alignSelf: 'center',
+        border: '1px solid white',
     },
 
 });
