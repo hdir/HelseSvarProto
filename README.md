@@ -27,7 +27,7 @@ Before running the application, ensure you have Python installed along with Flas
     ```bash
     pip install -r requirements.txt
 
-### Configuratiom
+### Configuration
 
 1. Create a .env file in the root directory of the project with the following content (replace the placeholders with your actual API keys):
 OPENAI_API_KEY=your_openai_api_key
